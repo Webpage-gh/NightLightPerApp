@@ -12,6 +12,7 @@ import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.BaseAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
@@ -26,14 +27,13 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Executors;
 
-/**
- * 阶段 3: 设置页 - 管理黑名单
- */
 public class SettingsActivity extends Activity {
 
     private static final File BLACKLIST_FILE = new File("/data/system/nightlightperapp_blacklist.txt");
@@ -48,7 +48,8 @@ public class SettingsActivity extends Activity {
     private AppListAdapter mAdapter;
     private final List<AppItem> mAllApps = new ArrayList<>();
     private final Set<String> mBlacklist = new HashSet<>();
-    private final Handler mMainHandler = new Handler(Looper.getMainLooper());
+    private final Handler mMain = new Handler(Looper.getMainLooper());
+    private boolean mModified = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -65,27 +66,31 @@ public class SettingsActivity extends Activity {
         mAdapter = new AppListAdapter();
         mListView.setAdapter(mAdapter);
 
+        // 点击列表项时收起键盘
+        mListView.setOnItemClickListener((parent, view, position, id) -> hideKeyboard());
+
         mSearchBox.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
                 mAdapter.filter(s.toString());
             }
-            @Override
-            public void afterTextChanged(Editable s) {}
+            @Override public void afterTextChanged(Editable s) {}
         });
 
         mSelectAll.setOnClickListener(v -> {
-            for (AppItem item : mAllApps) {
+            for (AppItem item : mAdapter.mFiltered) {
                 mBlacklist.add(item.packageName);
             }
+            mModified = true;
             mAdapter.notifyDataSetChanged();
             updateStatus();
         });
 
         mDeselectAll.setOnClickListener(v -> {
-            mBlacklist.clear();
+            for (AppItem item : mAdapter.mFiltered) {
+                mBlacklist.remove(item.packageName);
+            }
+            mModified = true;
             mAdapter.notifyDataSetChanged();
             updateStatus();
         });
@@ -96,7 +101,18 @@ public class SettingsActivity extends Activity {
     @Override
     protected void onPause() {
         super.onPause();
-        saveBlacklist();
+        hideKeyboard();
+        if (mModified) {
+            saveBlacklist();
+        }
+    }
+
+    private void hideKeyboard() {
+        View focused = getCurrentFocus();
+        if (focused instanceof EditText) {
+            InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+            imm.hideSoftInputFromWindow(focused.getWindowToken(), 0);
+        }
     }
 
     private void loadAppsAsync() {
@@ -116,7 +132,10 @@ public class SettingsActivity extends Activity {
                 result.add(new AppItem(app.packageName, label, icon));
             }
 
-            mMainHandler.post(() -> {
+            // 按应用名排序
+            Collections.sort(result, Comparator.comparing(a -> a.label.toLowerCase()));
+
+            mMain.post(() -> {
                 mAllApps.addAll(result);
                 mAdapter.filter(mSearchBox.getText().toString());
                 mLoading.setVisibility(View.GONE);
@@ -140,7 +159,7 @@ public class SettingsActivity extends Activity {
                 Process p = Runtime.getRuntime().exec(new String[]{"sh", "-c", cmd});
                 p.waitFor();
             } catch (Exception e) {
-                mMainHandler.post(() ->
+                mMain.post(() ->
                     Toast.makeText(this, "保存失败: " + e.getMessage(), Toast.LENGTH_SHORT).show()
                 );
             }
@@ -171,7 +190,7 @@ public class SettingsActivity extends Activity {
     }
 
     private class AppListAdapter extends BaseAdapter {
-        private List<AppItem> mFiltered = new ArrayList<>();
+        List<AppItem> mFiltered = new ArrayList<>();
 
         void filter(String query) {
             mFiltered.clear();
@@ -209,15 +228,17 @@ public class SettingsActivity extends Activity {
             h.icon.setImageDrawable(item.icon);
             h.name.setText(item.label);
             h.pkg.setText(item.packageName);
-            h.checkbox.setChecked(mBlacklist.contains(item.packageName));
 
-            convertView.setOnClickListener(v -> {
-                if (mBlacklist.contains(item.packageName)) {
-                    mBlacklist.remove(item.packageName);
-                } else {
+            // 防止复用时触发 listener
+            h.checkbox.setOnCheckedChangeListener(null);
+            h.checkbox.setChecked(mBlacklist.contains(item.packageName));
+            h.checkbox.setOnCheckedChangeListener((btn, checked) -> {
+                if (checked) {
                     mBlacklist.add(item.packageName);
+                } else {
+                    mBlacklist.remove(item.packageName);
                 }
-                h.checkbox.setChecked(mBlacklist.contains(item.packageName));
+                mModified = true;
                 updateStatus();
             });
 
