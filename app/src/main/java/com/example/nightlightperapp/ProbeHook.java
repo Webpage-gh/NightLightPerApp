@@ -11,14 +11,15 @@ import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
 /**
- * 阶段 2.5：硬编码相册，测试护眼开关实际效果
+ * 阶段 2.5：硬编码相册 + 哨兵值
  */
 public class ProbeHook implements IXposedHookLoadPackage {
 
     private static final String TAG = "NightLightProbe";
-
-    // 硬编码黑名单
     private static final String BLACKLISTED_PKG = "com.miui.gallery";
+    private static final String PAPER_MODE_KEY = "screen_paper_mode_enabled";
+    private static final String SAVED_KEY = "night_light_perapp_saved";
+    private static final int SENTINEL_NONE = -1; // 未接管
 
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) {
@@ -43,15 +44,19 @@ public class ProbeHook implements IXposedHookLoadPackage {
                         try {
                             IBinder token = (IBinder) param.args[0];
                             String pkg = getPackageNameFromToken(token, lpparam.classLoader);
+                            ContentResolver cr = getSystemContentResolver();
+                            if (cr == null) return;
 
                             if (BLACKLISTED_PKG.equals(pkg)) {
-                                // 黑名单 App 到前台
-                                ContentResolver cr = getSystemContentResolver();
-                                if (cr != null && isNightLightOn(cr)) {
-                                    disableNightLight(cr);
-                                    XposedBridge.log("[" + TAG + "] " + pkg + " 到前台 → 关闭护眼");
+                                int saved = Settings.System.getInt(cr, SAVED_KEY, SENTINEL_NONE);
+                                if (saved == SENTINEL_NONE) {
+                                    // 未接管，先保存原值，再关护眼
+                                    int current = Settings.System.getInt(cr, PAPER_MODE_KEY, 0);
+                                    Settings.System.putInt(cr, SAVED_KEY, current);
+                                    Settings.System.putInt(cr, PAPER_MODE_KEY, 0);
+                                    XposedBridge.log("[" + TAG + "] " + pkg + " 到前台 → 保存原值=" + current + "，关闭护眼");
                                 } else {
-                                    XposedBridge.log("[" + TAG + "] " + pkg + " 到前台 → 护眼未开，跳过");
+                                    XposedBridge.log("[" + TAG + "] " + pkg + " 到前台 → 已接管，跳过");
                                 }
                             }
                         } catch (Throwable t) {
@@ -73,13 +78,16 @@ public class ProbeHook implements IXposedHookLoadPackage {
                         try {
                             Object activityRecord = param.thisObject;
                             String pkg = (String) XposedHelpers.getObjectField(activityRecord, "packageName");
+                            ContentResolver cr = getSystemContentResolver();
+                            if (cr == null) return;
 
                             if (BLACKLISTED_PKG.equals(pkg)) {
-                                // 黑名单 App 离开前台
-                                ContentResolver cr = getSystemContentResolver();
-                                if (cr != null && !isNightLightOn(cr)) {
-                                    enableNightLight(cr);
-                                    XposedBridge.log("[" + TAG + "] " + pkg + " 离前台 → 恢复护眼");
+                                int saved = Settings.System.getInt(cr, SAVED_KEY, SENTINEL_NONE);
+                                if (saved != SENTINEL_NONE) {
+                                    // 已接管，恢复原值，复位哨兵
+                                    Settings.System.putInt(cr, PAPER_MODE_KEY, saved);
+                                    Settings.System.putInt(cr, SAVED_KEY, SENTINEL_NONE);
+                                    XposedBridge.log("[" + TAG + "] " + pkg + " 离前台 → 恢复护眼=" + saved);
                                 }
                             }
                         } catch (Throwable t) {
@@ -90,30 +98,6 @@ public class ProbeHook implements IXposedHookLoadPackage {
         );
 
         XposedBridge.log("[" + TAG + "] Hook 完成，请先开启系统护眼，再打开相册测试");
-    }
-
-    private boolean isNightLightOn(ContentResolver cr) {
-        try {
-            return Settings.System.getInt(cr, "screen_paper_mode_enabled") == 1;
-        } catch (Settings.SettingNotFoundException e) {
-            return false;
-        }
-    }
-
-    private void disableNightLight(ContentResolver cr) {
-        try {
-            Settings.System.putInt(cr, "screen_paper_mode_enabled", 0);
-        } catch (Exception e) {
-            XposedBridge.log("[" + TAG + "] 关闭护眼失败: " + e.getMessage());
-        }
-    }
-
-    private void enableNightLight(ContentResolver cr) {
-        try {
-            Settings.System.putInt(cr, "screen_paper_mode_enabled", 1);
-        } catch (Exception e) {
-            XposedBridge.log("[" + TAG + "] 恢复护眼失败: " + e.getMessage());
-        }
     }
 
     private String getPackageNameFromToken(IBinder token, ClassLoader classLoader) {
