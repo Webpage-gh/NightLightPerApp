@@ -174,7 +174,7 @@ public class SettingsActivity extends Activity {
         Set<String> blacklist = new HashSet<>();
         try {
             Process p = Runtime.getRuntime().exec(
-                new String[]{"su", "system", "-c", "cat " + BLACKLIST_FILE.getAbsolutePath()});
+                new String[]{"su", "-c", "cat " + BLACKLIST_FILE.getAbsolutePath()});
             BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream()));
             String line;
             while ((line = reader.readLine()) != null) {
