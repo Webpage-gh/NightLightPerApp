@@ -3,7 +3,6 @@
 
     <application
         android:label="NightLightPerApp"
-        android:icon="@mipmap/ic_launcher"
         android:supportsRtl="true">
 
         <!-- Xposed 模块声明 -->
