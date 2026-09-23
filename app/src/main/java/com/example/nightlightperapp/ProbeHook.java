@@ -2,12 +2,13 @@ package com.example.nightlightperapp;
 
 import android.content.ContentResolver;
 import android.content.Context;
-import android.net.Uri;
-import android.os.Bundle;
 import android.os.IBinder;
 import android.provider.Settings;
 import android.util.Log;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -18,7 +19,7 @@ import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
 /**
- * 阶段 2.6：黑名单从 ContentProvider 读取
+ * 阶段 2.6：黑名单从文件读取
  */
 public class ProbeHook implements IXposedHookLoadPackage {
 
@@ -26,7 +27,7 @@ public class ProbeHook implements IXposedHookLoadPackage {
     private static final String PAPER_MODE_KEY = "screen_paper_mode_enabled";
     private static final String SAVED_KEY = "night_light_perapp_saved";
     private static final int SENTINEL_NONE = -1;
-    private static final Uri BLACKLIST_URI = Uri.parse("content://com.example.nightlightperapp.blacklist/blacklist");
+    private static final File BLACKLIST_FILE = new File("/data/local/tmp/blacklist.txt");
 
     private volatile Set<String> mBlacklist = new HashSet<>();
 
@@ -38,7 +39,7 @@ public class ProbeHook implements IXposedHookLoadPackage {
 
         XposedBridge.log("[" + TAG + "] 已加载 v2.6");
 
-        // 加载黑名单
+        // 从文件加载黑名单
         refreshBlacklist();
         XposedBridge.log("[" + TAG + "] 初始黑名单: " + mBlacklist);
 
@@ -60,7 +61,6 @@ public class ProbeHook implements IXposedHookLoadPackage {
                             if (cr == null) return;
 
                             if (mBlacklist.contains(pkg)) {
-                                // 黑名单 App 到前台
                                 int saved = Settings.System.getInt(cr, SAVED_KEY, SENTINEL_NONE);
                                 if (saved == SENTINEL_NONE) {
                                     int current = Settings.System.getInt(cr, PAPER_MODE_KEY, 0);
@@ -69,7 +69,6 @@ public class ProbeHook implements IXposedHookLoadPackage {
                                     XposedBridge.log("[" + TAG + "] " + pkg + " 到前台 → 保存原值=" + current + "，关闭护眼");
                                 }
                             } else {
-                                // 非黑名单 App 到前台
                                 int saved = Settings.System.getInt(cr, SAVED_KEY, SENTINEL_NONE);
                                 if (saved != SENTINEL_NONE) {
                                     Settings.System.putInt(cr, PAPER_MODE_KEY, saved);
@@ -78,7 +77,7 @@ public class ProbeHook implements IXposedHookLoadPackage {
                                 }
                             }
 
-                            // 每次都刷新黑名单（简单实现，后续可优化）
+                            // 每次刷新黑名单（文件小，开销可忽略）
                             refreshBlacklist();
 
                         } catch (Throwable t) {
@@ -92,17 +91,19 @@ public class ProbeHook implements IXposedHookLoadPackage {
     }
 
     private void refreshBlacklist() {
+        Set<String> newBlacklist = new HashSet<>();
         try {
-            ContentResolver cr = getSystemContentResolver();
-            if (cr == null) return;
-
-            Bundle result = cr.call(BLACKLIST_URI, BlacklistProvider.METHOD_GET_BLACKLIST, null, null);
-            if (result != null) {
-                java.util.ArrayList<String> list = result.getStringArrayList(BlacklistProvider.KEY_PACKAGES);
-                if (list != null) {
-                    mBlacklist = new HashSet<>(list);
+            if (!BLACKLIST_FILE.exists()) return;
+            BufferedReader reader = new BufferedReader(new FileReader(BLACKLIST_FILE));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                line = line.trim();
+                if (!line.isEmpty() && !line.startsWith("#")) {
+                    newBlacklist.add(line);
                 }
             }
+            reader.close();
+            mBlacklist = newBlacklist;
         } catch (Throwable t) {
             XposedBridge.log("[" + TAG + "] refreshBlacklist: " + Log.getStackTraceString(t));
         }
