@@ -32,6 +32,7 @@ public class ProbeHook implements IXposedHookLoadPackage {
     private static final File BLACKLIST_FILE = new File("/data/system/nightlightperapp_blacklist.txt");
 
     private volatile Set<String> mBlacklist = new HashSet<>();
+    private long mLastModified = 0;
 
     // 反射缓存
     private Method sGetIntForUser;
@@ -124,9 +125,16 @@ public class ProbeHook implements IXposedHookLoadPackage {
     }
 
     private void refreshBlacklist() {
-        Set<String> newBlacklist = new HashSet<>();
         try {
-            if (!BLACKLIST_FILE.exists()) return;
+            long currentModified = BLACKLIST_FILE.lastModified();
+            if (currentModified == mLastModified && mLastModified != 0) return;
+            mLastModified = currentModified;
+
+            Set<String> newBlacklist = new HashSet<>();
+            if (!BLACKLIST_FILE.exists()) {
+                mBlacklist = newBlacklist;
+                return;
+            }
             BufferedReader reader = new BufferedReader(new FileReader(BLACKLIST_FILE));
             String line;
             while ((line = reader.readLine()) != null) {
@@ -137,6 +145,7 @@ public class ProbeHook implements IXposedHookLoadPackage {
             }
             reader.close();
             mBlacklist = newBlacklist;
+            XposedBridge.log("[" + TAG + "] 黑名单已更新: " + mBlacklist);
         } catch (Throwable t) {
             XposedBridge.log("[" + TAG + "] refreshBlacklist: " + Log.getStackTraceString(t));
         }
