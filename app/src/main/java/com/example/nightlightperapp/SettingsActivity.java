@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.graphics.drawable.Drawable;
+import android.graphics.Insets;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -12,6 +13,7 @@ import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.BaseAdapter;
 import android.widget.Button;
@@ -62,6 +64,15 @@ public class SettingsActivity extends Activity {
         mSelectAll = findViewById(R.id.select_all);
         mDeselectAll = findViewById(R.id.deselect_all);
         mStatusText = findViewById(R.id.status_text);
+
+        // Edge-to-edge
+        getWindow().setDecorFitsSystemWindows(false);
+        View root = findViewById(R.id.root);
+        root.setOnApplyWindowInsetsListener((v, insets) -> {
+            Insets bars = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+            v.setPadding(bars.left, bars.top, bars.right, bars.bottom);
+            return WindowInsets.CONSUMED;
+        });
 
         mAdapter = new AppListAdapter();
         mListView.setAdapter(mAdapter);
