@@ -25,7 +25,7 @@ import android.widget.Toast;
 
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileReader;
+import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -173,8 +173,9 @@ public class SettingsActivity extends Activity {
     private Set<String> readBlacklist() {
         Set<String> blacklist = new HashSet<>();
         try {
-            if (!BLACKLIST_FILE.exists()) return blacklist;
-            BufferedReader reader = new BufferedReader(new FileReader(BLACKLIST_FILE));
+            Process p = Runtime.getRuntime().exec(
+                new String[]{"su", "system", "-c", "cat " + BLACKLIST_FILE.getAbsolutePath()});
+            BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream()));
             String line;
             while ((line = reader.readLine()) != null) {
                 line = line.trim();
@@ -183,6 +184,7 @@ public class SettingsActivity extends Activity {
                 }
             }
             reader.close();
+            p.waitFor();
         } catch (Exception e) {
             // 忽略
         }
