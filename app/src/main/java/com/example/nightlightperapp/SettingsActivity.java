@@ -1,12 +1,12 @@
 package com.example.nightlightperapp;
 
 import android.app.Activity;
-import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.graphics.drawable.Drawable;
-import android.os.AsyncTask;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.LayoutInflater;
@@ -25,11 +25,11 @@ import android.widget.Toast;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
-import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.Executors;
 
 /**
  * 阶段 3: 设置页 - 管理黑名单
@@ -46,9 +46,9 @@ public class SettingsActivity extends Activity {
     private TextView mStatusText;
 
     private AppListAdapter mAdapter;
-    private List<AppItem> mAllApps = new ArrayList<>();
-    private Set<String> mBlacklist = new HashSet<>();
-    private boolean mLoadingDone = false;
+    private final List<AppItem> mAllApps = new ArrayList<>();
+    private final Set<String> mBlacklist = new HashSet<>();
+    private final Handler mMainHandler = new Handler(Looper.getMainLooper());
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -65,7 +65,6 @@ public class SettingsActivity extends Activity {
         mAdapter = new AppListAdapter();
         mListView.setAdapter(mAdapter);
 
-        // 搜索过滤
         mSearchBox.addTextChangedListener(new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
@@ -77,7 +76,6 @@ public class SettingsActivity extends Activity {
             public void afterTextChanged(Editable s) {}
         });
 
-        // 全选/全不选
         mSelectAll.setOnClickListener(v -> {
             for (AppItem item : mAllApps) {
                 mBlacklist.add(item.packageName);
@@ -92,16 +90,40 @@ public class SettingsActivity extends Activity {
             updateStatus();
         });
 
-        // 异步加载应用列表
-        new LoadAppsTask().execute();
+        loadAppsAsync();
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        if (mLoadingDone) {
-            saveBlacklist();
-        }
+        saveBlacklist();
+    }
+
+    private void loadAppsAsync() {
+        mLoading.setVisibility(View.VISIBLE);
+        mListView.setVisibility(View.GONE);
+
+        Executors.newSingleThreadExecutor().execute(() -> {
+            mBlacklist.addAll(readBlacklist());
+
+            PackageManager pm = getPackageManager();
+            List<ApplicationInfo> apps = pm.getInstalledApplications(0);
+            List<AppItem> result = new ArrayList<>();
+
+            for (ApplicationInfo app : apps) {
+                String label = app.loadLabel(pm).toString();
+                Drawable icon = app.loadIcon(pm);
+                result.add(new AppItem(app.packageName, label, icon));
+            }
+
+            mMainHandler.post(() -> {
+                mAllApps.addAll(result);
+                mAdapter.filter(mSearchBox.getText().toString());
+                mLoading.setVisibility(View.GONE);
+                mListView.setVisibility(View.VISIBLE);
+                updateStatus();
+            });
+        });
     }
 
     private void saveBlacklist() {
@@ -109,70 +131,22 @@ public class SettingsActivity extends Activity {
         for (String pkg : mBlacklist) {
             sb.append(pkg).append("\n");
         }
-        String content = sb.toString();
+        String content = sb.toString().trim();
 
-        // 用 su system -c 写入，确保权限正确
-        try {
-            String cmd = "su system -c \"echo '" + content.trim() + "' > " + BLACKLIST_FILE.getAbsolutePath() + "\"";
-            Runtime.getRuntime().exec(new String[]{"sh", "-c", cmd}).waitFor();
-        } catch (Exception e) {
-            Toast.makeText(this, "保存失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    private void updateStatus() {
-        mStatusText.setText("已选择 " + mBlacklist.size() + " 个应用");
-    }
-
-    /**
-     * 异步加载已安装应用列表
-     */
-    private class LoadAppsTask extends AsyncTask<Void, AppItem, Void> {
-
-        @Override
-        protected void onPreExecute() {
-            mLoading.setVisibility(View.VISIBLE);
-            mListView.setVisibility(View.GONE);
-        }
-
-        @Override
-        protected Void doInBackground(Void... voids) {
-            // 读取当前黑名单
-            mBlacklist = readBlacklist();
-
-            PackageManager pm = getPackageManager();
-            List<ApplicationInfo> apps = pm.getInstalledApplications(PackageManager.GET_META_DATA);
-
-            for (ApplicationInfo app : apps) {
-                // 只显示用户应用（过滤系统核心应用）
-                if ((app.flags & ApplicationInfo.FLAG_SYSTEM) == 0) {
-                    String label = app.loadLabel(pm).toString();
-                    Drawable icon = app.loadIcon(pm);
-                    publishProgress(new AppItem(app.packageName, label, icon));
-                }
+        Executors.newSingleThreadExecutor().execute(() -> {
+            try {
+                String escaped = content.replace("'", "'\\''");
+                String cmd = "su system -c 'echo \"" + escaped + "\" > " + BLACKLIST_FILE.getAbsolutePath() + "'";
+                Process p = Runtime.getRuntime().exec(new String[]{"sh", "-c", cmd});
+                p.waitFor();
+            } catch (Exception e) {
+                mMainHandler.post(() ->
+                    Toast.makeText(this, "保存失败: " + e.getMessage(), Toast.LENGTH_SHORT).show()
+                );
             }
-
-            return null;
-        }
-
-        @Override
-        protected void onProgressUpdate(AppItem... values) {
-            mAllApps.add(values[0]);
-            mAdapter.notifyDataSetChanged();
-        }
-
-        @Override
-        protected void onPostExecute(Void aVoid) {
-            mLoading.setVisibility(View.GONE);
-            mListView.setVisibility(View.VISIBLE);
-            mLoadingDone = true;
-            updateStatus();
-        }
+        });
     }
 
-    /**
-     * 读取黑名单文件
-     */
     private Set<String> readBlacklist() {
         Set<String> blacklist = new HashSet<>();
         try {
@@ -192,70 +166,58 @@ public class SettingsActivity extends Activity {
         return blacklist;
     }
 
-    /**
-     * 应用列表适配器
-     */
+    private void updateStatus() {
+        mStatusText.setText("已选择 " + mBlacklist.size() + " 个应用");
+    }
+
     private class AppListAdapter extends BaseAdapter {
+        private List<AppItem> mFiltered = new ArrayList<>();
 
-        private List<AppItem> mFilteredApps = new ArrayList<>();
-
-        public void filter(String query) {
-            mFilteredApps.clear();
+        void filter(String query) {
+            mFiltered.clear();
             query = query.toLowerCase();
             for (AppItem item : mAllApps) {
                 if (item.label.toLowerCase().contains(query) ||
                     item.packageName.toLowerCase().contains(query)) {
-                    mFilteredApps.add(item);
+                    mFiltered.add(item);
                 }
             }
             notifyDataSetChanged();
         }
 
-        @Override
-        public int getCount() {
-            return mFilteredApps.size();
-        }
+        @Override public int getCount() { return mFiltered.size(); }
+        @Override public Object getItem(int pos) { return mFiltered.get(pos); }
+        @Override public long getItemId(int pos) { return pos; }
 
         @Override
-        public Object getItem(int position) {
-            return mFilteredApps.get(position);
-        }
-
-        @Override
-        public long getItemId(int position) {
-            return position;
-        }
-
-        @Override
-        public View getView(int position, View convertView, ViewGroup parent) {
-            ViewHolder holder;
+        public View getView(int pos, View convertView, ViewGroup parent) {
+            ViewHolder h;
             if (convertView == null) {
                 convertView = LayoutInflater.from(SettingsActivity.this)
                         .inflate(R.layout.list_item_app, parent, false);
-                holder = new ViewHolder();
-                holder.icon = convertView.findViewById(R.id.app_icon);
-                holder.name = convertView.findViewById(R.id.app_name);
-                holder.pkg = convertView.findViewById(R.id.app_package);
-                holder.checkbox = convertView.findViewById(R.id.app_checkbox);
-                convertView.setTag(holder);
+                h = new ViewHolder();
+                h.icon = convertView.findViewById(R.id.app_icon);
+                h.name = convertView.findViewById(R.id.app_name);
+                h.pkg = convertView.findViewById(R.id.app_package);
+                h.checkbox = convertView.findViewById(R.id.app_checkbox);
+                convertView.setTag(h);
             } else {
-                holder = (ViewHolder) convertView.getTag();
+                h = (ViewHolder) convertView.getTag();
             }
 
-            AppItem item = mFilteredApps.get(position);
-            holder.icon.setImageDrawable(item.icon);
-            holder.name.setText(item.label);
-            holder.pkg.setText(item.packageName);
-            holder.checkbox.setChecked(mBlacklist.contains(item.packageName));
+            AppItem item = mFiltered.get(pos);
+            h.icon.setImageDrawable(item.icon);
+            h.name.setText(item.label);
+            h.pkg.setText(item.packageName);
+            h.checkbox.setChecked(mBlacklist.contains(item.packageName));
 
-            // 点击整行也能切换
             convertView.setOnClickListener(v -> {
                 if (mBlacklist.contains(item.packageName)) {
                     mBlacklist.remove(item.packageName);
                 } else {
                     mBlacklist.add(item.packageName);
                 }
-                holder.checkbox.setChecked(mBlacklist.contains(item.packageName));
+                h.checkbox.setChecked(mBlacklist.contains(item.packageName));
                 updateStatus();
             });
 
@@ -270,9 +232,6 @@ public class SettingsActivity extends Activity {
         }
     }
 
-    /**
-     * 应用信息
-     */
     static class AppItem {
         String packageName;
         String label;
