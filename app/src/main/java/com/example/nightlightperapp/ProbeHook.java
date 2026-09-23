@@ -52,21 +52,21 @@ public class ProbeHook implements IXposedHookLoadPackage {
 
                             if (BLACKLISTED_PKG.equals(pkg)) {
                                 // 黑名单 App 到前台
-                                int saved = Settings.System.getIntForUser(cr, SAVED_KEY, SENTINEL_NONE, USER_CURRENT);
+                                int saved = Settings.System.getInt(cr, SAVED_KEY, SENTINEL_NONE);
                                 if (saved == SENTINEL_NONE) {
-                                    int current = Settings.System.getIntForUser(cr, PAPER_MODE_KEY, 0, USER_CURRENT);
-                                    Settings.System.putIntForUser(cr, SAVED_KEY, current, USER_CURRENT);
-                                    Settings.System.putIntForUser(cr, PAPER_MODE_KEY, 0, USER_CURRENT);
+                                    int current = Settings.System.getInt(cr, PAPER_MODE_KEY, 0);
+                                    Settings.System.putInt(cr, SAVED_KEY, current);
+                                    Settings.System.putInt(cr, PAPER_MODE_KEY, 0);
                                     XposedBridge.log("[" + TAG + "] " + pkg + " 到前台 → 保存原值=" + current + "，关闭护眼");
                                 } else {
                                     XposedBridge.log("[" + TAG + "] " + pkg + " 到前台 → 已接管，跳过");
                                 }
                             } else {
                                 // 非黑名单 App 到前台
-                                int saved = Settings.System.getIntForUser(cr, SAVED_KEY, SENTINEL_NONE, USER_CURRENT);
+                                int saved = Settings.System.getInt(cr, SAVED_KEY, SENTINEL_NONE);
                                 if (saved != SENTINEL_NONE) {
-                                    Settings.System.putIntForUser(cr, PAPER_MODE_KEY, saved, USER_CURRENT);
-                                    Settings.System.putIntForUser(cr, SAVED_KEY, SENTINEL_NONE, USER_CURRENT);
+                                    Settings.System.putInt(cr, PAPER_MODE_KEY, saved);
+                                    Settings.System.putInt(cr, SAVED_KEY, SENTINEL_NONE);
                                     XposedBridge.log("[" + TAG + "] " + pkg + " 到前台 → 恢复护眼=" + saved);
                                 }
                             }
