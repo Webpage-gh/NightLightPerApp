@@ -27,7 +27,7 @@ public class ProbeHook implements IXposedHookLoadPackage {
     private static final String PAPER_MODE_KEY = "screen_paper_mode_enabled";
     private static final String SAVED_KEY = "night_light_perapp_saved";
     private static final int SENTINEL_NONE = -1;
-    private static final File BLACKLIST_FILE = new File("/data/local/tmp/blacklist.txt");
+    private static final File BLACKLIST_FILE = new File("/data/system/nightlightperapp_blacklist.txt");
 
     private volatile Set<String> mBlacklist = new HashSet<>();
 
