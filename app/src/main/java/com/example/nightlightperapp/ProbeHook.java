@@ -2,7 +2,9 @@ package com.example.nightlightperapp;
 
 import android.content.ContentResolver;
 import android.os.IBinder;
+import android.os.UserHandle;
 import android.provider.Settings;
+import android.util.Log;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XC_MethodHook;
@@ -48,50 +50,27 @@ public class ProbeHook implements IXposedHookLoadPackage {
                             if (cr == null) return;
 
                             if (BLACKLISTED_PKG.equals(pkg)) {
-                                int saved = Settings.System.getInt(cr, SAVED_KEY, SENTINEL_NONE);
+                                // 黑名单 App 到前台
+                                int saved = Settings.System.getIntForUser(cr, SAVED_KEY, SENTINEL_NONE, UserHandle.USER_CURRENT);
                                 if (saved == SENTINEL_NONE) {
-                                    // 未接管，先保存原值，再关护眼
-                                    int current = Settings.System.getInt(cr, PAPER_MODE_KEY, 0);
-                                    Settings.System.putInt(cr, SAVED_KEY, current);
-                                    Settings.System.putInt(cr, PAPER_MODE_KEY, 0);
+                                    int current = Settings.System.getIntForUser(cr, PAPER_MODE_KEY, 0, UserHandle.USER_CURRENT);
+                                    Settings.System.putIntForUser(cr, SAVED_KEY, current, UserHandle.USER_CURRENT);
+                                    Settings.System.putIntForUser(cr, PAPER_MODE_KEY, 0, UserHandle.USER_CURRENT);
                                     XposedBridge.log("[" + TAG + "] " + pkg + " 到前台 → 保存原值=" + current + "，关闭护眼");
                                 } else {
                                     XposedBridge.log("[" + TAG + "] " + pkg + " 到前台 → 已接管，跳过");
                                 }
-                            }
-                        } catch (Throwable t) {
-                            XposedBridge.log("[" + TAG + "] resumed error: " + t.getMessage());
-                        }
-                    }
-                }
-        );
-
-        // Hook activityPaused
-        XposedHelpers.findAndHookMethod(
-                arClass,
-                lpparam.classLoader,
-                "activityPaused",
-                boolean.class,
-                new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) {
-                        try {
-                            Object activityRecord = param.thisObject;
-                            String pkg = (String) XposedHelpers.getObjectField(activityRecord, "packageName");
-                            ContentResolver cr = getSystemContentResolver();
-                            if (cr == null) return;
-
-                            if (BLACKLISTED_PKG.equals(pkg)) {
-                                int saved = Settings.System.getInt(cr, SAVED_KEY, SENTINEL_NONE);
+                            } else {
+                                // 非黑名单 App 到前台
+                                int saved = Settings.System.getIntForUser(cr, SAVED_KEY, SENTINEL_NONE, UserHandle.USER_CURRENT);
                                 if (saved != SENTINEL_NONE) {
-                                    // 已接管，恢复原值，复位哨兵
-                                    Settings.System.putInt(cr, PAPER_MODE_KEY, saved);
-                                    Settings.System.putInt(cr, SAVED_KEY, SENTINEL_NONE);
-                                    XposedBridge.log("[" + TAG + "] " + pkg + " 离前台 → 恢复护眼=" + saved);
+                                    Settings.System.putIntForUser(cr, PAPER_MODE_KEY, saved, UserHandle.USER_CURRENT);
+                                    Settings.System.putIntForUser(cr, SAVED_KEY, SENTINEL_NONE, UserHandle.USER_CURRENT);
+                                    XposedBridge.log("[" + TAG + "] " + pkg + " 到前台 → 恢复护眼=" + saved);
                                 }
                             }
                         } catch (Throwable t) {
-                            XposedBridge.log("[" + TAG + "] paused error: " + t.getMessage());
+                            XposedBridge.log("[" + TAG + "] resumed error: " + Log.getStackTraceString(t));
                         }
                     }
                 }
@@ -108,6 +87,7 @@ public class ProbeHook implements IXposedHookLoadPackage {
             String pkg = (String) XposedHelpers.getObjectField(ar, "packageName");
             return pkg != null ? pkg : "<null pkg>";
         } catch (Throwable t) {
+            XposedBridge.log("[" + TAG + "] getPackageNameFromToken: " + Log.getStackTraceString(t));
             return "<error>";
         }
     }
@@ -121,7 +101,7 @@ public class ProbeHook implements IXposedHookLoadPackage {
             Object ctx = XposedHelpers.callMethod(at, "getSystemContext");
             return ((android.content.Context) ctx).getContentResolver();
         } catch (Throwable t) {
-            XposedBridge.log("[" + TAG + "] getSystemContentResolver 失败: " + t.getMessage());
+            XposedBridge.log("[" + TAG + "] getSystemContentResolver: " + Log.getStackTraceString(t));
             return null;
         }
     }
