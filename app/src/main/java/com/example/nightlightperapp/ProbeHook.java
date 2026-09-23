@@ -2,7 +2,7 @@ package com.example.nightlightperapp;
 
 import android.content.ContentResolver;
 import android.os.IBinder;
-import android.os.UserHandle;
+
 import android.provider.Settings;
 import android.util.Log;
 
@@ -22,6 +22,7 @@ public class ProbeHook implements IXposedHookLoadPackage {
     private static final String PAPER_MODE_KEY = "screen_paper_mode_enabled";
     private static final String SAVED_KEY = "night_light_perapp_saved";
     private static final int SENTINEL_NONE = -1; // 未接管
+    private static final int USER_CURRENT = -2; // USER_CURRENT
 
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) {
@@ -51,21 +52,21 @@ public class ProbeHook implements IXposedHookLoadPackage {
 
                             if (BLACKLISTED_PKG.equals(pkg)) {
                                 // 黑名单 App 到前台
-                                int saved = Settings.System.getIntForUser(cr, SAVED_KEY, SENTINEL_NONE, UserHandle.USER_CURRENT);
+                                int saved = Settings.System.getIntForUser(cr, SAVED_KEY, SENTINEL_NONE, USER_CURRENT);
                                 if (saved == SENTINEL_NONE) {
-                                    int current = Settings.System.getIntForUser(cr, PAPER_MODE_KEY, 0, UserHandle.USER_CURRENT);
-                                    Settings.System.putIntForUser(cr, SAVED_KEY, current, UserHandle.USER_CURRENT);
-                                    Settings.System.putIntForUser(cr, PAPER_MODE_KEY, 0, UserHandle.USER_CURRENT);
+                                    int current = Settings.System.getIntForUser(cr, PAPER_MODE_KEY, 0, USER_CURRENT);
+                                    Settings.System.putIntForUser(cr, SAVED_KEY, current, USER_CURRENT);
+                                    Settings.System.putIntForUser(cr, PAPER_MODE_KEY, 0, USER_CURRENT);
                                     XposedBridge.log("[" + TAG + "] " + pkg + " 到前台 → 保存原值=" + current + "，关闭护眼");
                                 } else {
                                     XposedBridge.log("[" + TAG + "] " + pkg + " 到前台 → 已接管，跳过");
                                 }
                             } else {
                                 // 非黑名单 App 到前台
-                                int saved = Settings.System.getIntForUser(cr, SAVED_KEY, SENTINEL_NONE, UserHandle.USER_CURRENT);
+                                int saved = Settings.System.getIntForUser(cr, SAVED_KEY, SENTINEL_NONE, USER_CURRENT);
                                 if (saved != SENTINEL_NONE) {
-                                    Settings.System.putIntForUser(cr, PAPER_MODE_KEY, saved, UserHandle.USER_CURRENT);
-                                    Settings.System.putIntForUser(cr, SAVED_KEY, SENTINEL_NONE, UserHandle.USER_CURRENT);
+                                    Settings.System.putIntForUser(cr, PAPER_MODE_KEY, saved, USER_CURRENT);
+                                    Settings.System.putIntForUser(cr, SAVED_KEY, SENTINEL_NONE, USER_CURRENT);
                                     XposedBridge.log("[" + TAG + "] " + pkg + " 到前台 → 恢复护眼=" + saved);
                                 }
                             }
