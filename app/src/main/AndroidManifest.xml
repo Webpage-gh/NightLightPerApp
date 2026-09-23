@@ -35,13 +35,6 @@
             </intent-filter>
         </activity>
 
-        <!-- ContentProvider: 黑名单数据共享 -->
-        <provider
-            android:name=".BlacklistProvider"
-            android:authorities="com.example.nightlightperapp.blacklist"
-            android:exported="true"
-            android:grantUriPermissions="true" />
-
     </application>
 
 </manifest>

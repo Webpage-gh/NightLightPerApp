@@ -3,7 +3,6 @@ package com.example.nightlightperapp;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.os.IBinder;
-import android.os.UserHandle;
 import android.provider.Settings;
 import android.util.Log;
 import java.lang.reflect.Method;
@@ -18,7 +17,6 @@ import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
-import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
 /**
  * 阶段 2.6：黑名单从文件读取
