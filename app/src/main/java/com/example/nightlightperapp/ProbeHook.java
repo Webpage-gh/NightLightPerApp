@@ -3,8 +3,10 @@ package com.example.nightlightperapp;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.os.IBinder;
+import android.os.UserHandle;
 import android.provider.Settings;
 import android.util.Log;
+import java.lang.reflect.Method;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -30,6 +32,11 @@ public class ProbeHook implements IXposedHookLoadPackage {
     private static final File BLACKLIST_FILE = new File("/data/system/nightlightperapp_blacklist.txt");
 
     private volatile Set<String> mBlacklist = new HashSet<>();
+
+    // 反射缓存
+    private Method sGetIntForUser;
+    private Method sPutIntForUser;
+    private int mUserCurrent = -2; // UserHandle.USER_CURRENT
 
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) {
@@ -61,18 +68,18 @@ public class ProbeHook implements IXposedHookLoadPackage {
                             if (cr == null) return;
 
                             if (mBlacklist.contains(pkg)) {
-                                int saved = Settings.System.getInt(cr, SAVED_KEY, SENTINEL_NONE);
+                                int saved = settingsGetInt(cr, SAVED_KEY, SENTINEL_NONE);
                                 if (saved == SENTINEL_NONE) {
-                                    int current = Settings.System.getInt(cr, PAPER_MODE_KEY, 0);
-                                    Settings.System.putInt(cr, SAVED_KEY, current);
-                                    Settings.System.putInt(cr, PAPER_MODE_KEY, 0);
+                                    int current = settingsGetInt(cr, PAPER_MODE_KEY, 0);
+                                    settingsPutInt(cr, SAVED_KEY, current);
+                                    settingsPutInt(cr, PAPER_MODE_KEY, 0);
                                     XposedBridge.log("[" + TAG + "] " + pkg + " 到前台 → 保存原值=" + current + "，关闭护眼");
                                 }
                             } else {
-                                int saved = Settings.System.getInt(cr, SAVED_KEY, SENTINEL_NONE);
+                                int saved = settingsGetInt(cr, SAVED_KEY, SENTINEL_NONE);
                                 if (saved != SENTINEL_NONE) {
-                                    Settings.System.putInt(cr, PAPER_MODE_KEY, saved);
-                                    Settings.System.putInt(cr, SAVED_KEY, SENTINEL_NONE);
+                                    settingsPutInt(cr, PAPER_MODE_KEY, saved);
+                                    settingsPutInt(cr, SAVED_KEY, SENTINEL_NONE);
                                     XposedBridge.log("[" + TAG + "] " + pkg + " 到前台 → 恢复护眼=" + saved);
                                 }
                             }
@@ -88,6 +95,32 @@ public class ProbeHook implements IXposedHookLoadPackage {
         );
 
         XposedBridge.log("[" + TAG + "] Hook 完成");
+    }
+
+    private int settingsGetInt(ContentResolver cr, String key, int def) {
+        try {
+            if (sGetIntForUser == null) {
+                sGetIntForUser = Settings.System.class.getMethod(
+                        "getIntForUser", ContentResolver.class, String.class, int.class, int.class);
+            }
+            return (int) sGetIntForUser.invoke(null, cr, key, def, mUserCurrent);
+        } catch (Throwable t) {
+            // 降级到普通 API
+            return Settings.System.getInt(cr, key, def);
+        }
+    }
+
+    private void settingsPutInt(ContentResolver cr, String key, int value) {
+        try {
+            if (sPutIntForUser == null) {
+                sPutIntForUser = Settings.System.class.getMethod(
+                        "putIntForUser", ContentResolver.class, String.class, int.class, int.class);
+            }
+            sPutIntForUser.invoke(null, cr, key, value, mUserCurrent);
+        } catch (Throwable t) {
+            // 降级到普通 API
+            Settings.System.putInt(cr, key, value);
+        }
     }
 
     private void refreshBlacklist() {
