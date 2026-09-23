@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:label="NightLightPerApp"
+        android:icon="@mipmap/ic_launcher"
+        android:supportsRtl="true">
+
+        <!-- Xposed 模块声明 -->
+        <meta-data
+            android:name="xposedmodule"
+            android:value="true" />
+
+        <meta-data
+            android:name="xposeddescription"
+            android:value="按应用启用/禁用护眼模式" />
+
+        <meta-data
+            android:name="xposedminversion"
+            android:value="82" />
+
+        <!-- 设置页 Activity -->
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="true"
+            android:label="NightLightPerApp 设置">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- ContentProvider: 黑名单数据共享 -->
+        <provider
+            android:name=".BlacklistProvider"
+            android:authorities="com.example.nightlightperapp.blacklist"
+            android:exported="true"
+            android:grantUriPermissions="true" />
+
+    </application>
+
+</manifest>
