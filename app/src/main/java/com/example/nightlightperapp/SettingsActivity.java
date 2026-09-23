@@ -77,6 +77,10 @@ public class SettingsActivity extends Activity {
             @Override public void afterTextChanged(Editable s) {}
         });
 
+        mSelectAll.setText(R.string.select_all);
+        mDeselectAll.setText(R.string.deselect_all);
+        mSearchBox.setHint(R.string.search_hint);
+
         mSelectAll.setOnClickListener(v -> {
             for (AppItem item : mAdapter.mFiltered) {
                 mBlacklist.add(item.packageName);
@@ -186,7 +190,7 @@ public class SettingsActivity extends Activity {
     }
 
     private void updateStatus() {
-        mStatusText.setText("已选择 " + mBlacklist.size() + " 个应用");
+        mStatusText.setText(getString(R.string.status_format, mBlacklist.size()));
     }
 
     private class AppListAdapter extends BaseAdapter {
