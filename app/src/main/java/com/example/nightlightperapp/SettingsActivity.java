@@ -67,10 +67,17 @@ public class SettingsActivity extends Activity {
 
         // Edge-to-edge
         getWindow().setDecorFitsSystemWindows(false);
+        mListView.setClipToPadding(false);
         View root = findViewById(R.id.root);
         root.setOnApplyWindowInsetsListener((v, insets) -> {
             Insets bars = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
-            v.setPadding(bars.left, bars.top, bars.right, bars.bottom);
+            v.setPadding(bars.left, bars.top, bars.right, 0);
+            mListView.setPadding(
+                mListView.getPaddingLeft(),
+                mListView.getPaddingTop(),
+                mListView.getPaddingRight(),
+                bars.bottom
+            );
             return WindowInsets.CONSUMED;
         });
 
