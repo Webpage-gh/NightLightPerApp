@@ -157,8 +157,13 @@ public class SettingsActivity extends Activity {
                 result.add(new AppItem(app.packageName, label, icon));
             }
 
-            // 按应用名排序
-            Collections.sort(result, Comparator.comparing(a -> a.label.toLowerCase()));
+            // 已勾选排前面，再按名称排序
+            Collections.sort(result, (a, b) -> {
+                boolean aChecked = mBlacklist.contains(a.packageName);
+                boolean bChecked = mBlacklist.contains(b.packageName);
+                if (aChecked != bChecked) return aChecked ? -1 : 1;
+                return a.label.toLowerCase().compareTo(b.label.toLowerCase());
+            });
 
             mMain.post(() -> {
                 mAllApps.addAll(result);
@@ -228,6 +233,13 @@ public class SettingsActivity extends Activity {
                     mFiltered.add(item);
                 }
             }
+            // 搜索结果也保持已勾选在前（保持相对顺序）
+            Collections.sort(mFiltered, (a, b) -> {
+                boolean aChecked = mBlacklist.contains(a.packageName);
+                boolean bChecked = mBlacklist.contains(b.packageName);
+                if (aChecked != bChecked) return aChecked ? -1 : 1;
+                return 0; // 相同组内保持原序
+            });
             notifyDataSetChanged();
         }
 
