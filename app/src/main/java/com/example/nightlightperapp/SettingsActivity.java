@@ -69,9 +69,12 @@ public class SettingsActivity extends Activity {
         getWindow().setDecorFitsSystemWindows(false);
         mListView.setClipToPadding(false);
         View root = findViewById(R.id.root);
+        // 保存原始 padding
+        final int basePadL = root.getPaddingLeft();
+        final int basePadR = root.getPaddingRight();
         root.setOnApplyWindowInsetsListener((v, insets) -> {
             Insets bars = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
-            v.setPadding(bars.left, bars.top, bars.right, 0);
+            v.setPadding(bars.left + basePadL, bars.top + 16, bars.right + basePadR, 0);
             mListView.setPadding(
                 mListView.getPaddingLeft(),
                 mListView.getPaddingTop(),
